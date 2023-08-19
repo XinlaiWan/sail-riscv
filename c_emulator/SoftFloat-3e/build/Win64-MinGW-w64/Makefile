@@ -369,7 +369,7 @@ OBJS_ALL = $(OBJS_PRIMITIVES) $(OBJS_SPECIALIZE) $(OBJS_OTHERS)
 $(OBJS_ALL): \
   $(OTHER_HEADERS) platform.h $(SOURCE_DIR)/include/primitiveTypes.h \
   $(SOURCE_DIR)/include/primitives.h
-$(OBJS_SPECIALIZE) $(OBJS_OTHERS) $(OBJS_RECIPROCAL): \
+$(OBJS_SPECIALIZE) $(OBJS_OTHERS): \
   $(SOURCE_DIR)/include/softfloat_types.h $(SOURCE_DIR)/include/internals.h \
   $(SOURCE_DIR)/$(SPECIALIZE_TYPE)/specialize.h \
   $(SOURCE_DIR)/include/softfloat.h
