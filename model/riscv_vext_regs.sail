@@ -238,7 +238,7 @@ function init_vregs () = {
   vr31 = zero_vreg
 }
 
-/* Vector CSR */   
+/* Vector CSR */
 bitfield Vcsr : bits(3) = {
   vxrm  : 2 .. 1,
   vxsat : 0
@@ -307,7 +307,7 @@ function read_vreg(num_elem, SEW, LMUL_pow, vrid) = {
     /* vrid must be a multiple of emul */
     assert(false, "invalid register group: vrid is not a multiple of EMUL")
   } else {
-    if LMUL_pow < 0 then { 
+    if LMUL_pow < 0 then {
       result = read_single_vreg('n, SEW, vrid);
     } else {
       let 'num_elem_single : int = VLEN / SEW;
@@ -330,20 +330,20 @@ function read_vreg(num_elem, SEW, LMUL_pow, vrid) = {
 }
 
 /* Single element reading operation */
-val read_single_element : forall 'm 'x 'p, 8 <= 'm <= 128. (int('m), int('x), int('p), regidx) -> bits('m) effect {escape, rreg, undef}
-function read_single_element(EEW, index, EMUL_pow, vrid) = {
+val read_single_element : forall 'm 'x, 8 <= 'm <= 128. (int('m), int('x), regidx) -> bits('m) effect {escape, rreg, undef}
+function read_single_element(EEW, index, vrid) = {
   let VLEN = int_power(2, get_vlen_pow());
   assert(VLEN >= EEW);
   let 'elem_per_reg : int = VLEN / EEW;
-  let real_vrid  : regidx = if EMUL_pow > 0 then vrid + to_bits(5, index / 'elem_per_reg) else vrid;
-  let real_index : int    = if EMUL_pow > 0 then index % 'elem_per_reg else index;
+  let real_vrid  : regidx = vrid + to_bits(5, index / 'elem_per_reg);
+  let real_index : int    = index % 'elem_per_reg;
   let vrid_val : vector('elem_per_reg, dec, bits('m)) = read_single_vreg('elem_per_reg, EEW, real_vrid);
   assert(0 <= real_index & real_index < 'elem_per_reg);
   vrid_val[real_index]
 }
 
 /* The general vreg writing operation with num_elem as max(VLMAX,VLEN/SEW)) */
-val write_vreg : forall 'n 'm 'p. (int('n), int('m), int('p), regidx, vector('n, dec, bits('m))) -> unit effect {escape, rreg, undef, wreg} 
+val write_vreg : forall 'n 'm 'p. (int('n), int('m), int('p), regidx, vector('n, dec, bits('m))) -> unit effect {escape, rreg, undef, wreg}
 function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) = {
   let VLEN = int_power(2, get_vlen_pow());
   let LMUL_pow_reg = if LMUL_pow < 0 then 0 else LMUL_pow;
@@ -365,12 +365,12 @@ function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) = {
 }
 
 /* Single element writing operation */
-val write_single_element : forall 'm 'x 'p, 8 <= 'm <= 128. (int('m), int('x), int('p), regidx, bits('m)) -> unit effect {escape, rreg, undef, wreg}
-function write_single_element(EEW, index, EMUL_pow, vrid, value) = {
+val write_single_element : forall 'm 'x, 8 <= 'm <= 128. (int('m), int('x), regidx, bits('m)) -> unit effect {escape, rreg, undef, wreg}
+function write_single_element(EEW, index, vrid, value) = {
   let VLEN = int_power(2, get_vlen_pow());
   let 'elem_per_reg : int = VLEN / EEW;
-  let real_vrid  : regidx = if EMUL_pow > 0 then vrid + to_bits(5, index / 'elem_per_reg) else vrid;
-  let real_index : int    = if EMUL_pow > 0 then index % 'elem_per_reg else index;
+  let real_vrid  : regidx = vrid + to_bits(5, index / 'elem_per_reg);
+  let real_index : int    = index % 'elem_per_reg;
 
   let vrid_val : vector('elem_per_reg, dec, bits('m)) = read_single_vreg('elem_per_reg, EEW, real_vrid);
   r : vregtype = zeros();

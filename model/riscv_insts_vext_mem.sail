@@ -53,14 +53,14 @@ mapping nfields_int : bits(3) <-> {|1, 2, 3, 4, 5, 6, 7, 8|} = {
 }
 
 mapping nfields_string : bits(3) <-> string = {
-  0b000     <-> "1",
-  0b001     <-> "2",
-  0b010     <-> "3",
-  0b011     <-> "4",
-  0b100     <-> "5",
-  0b101     <-> "6",
-  0b110     <-> "7",
-  0b111     <-> "8"
+  0b000     <-> "",
+  0b001     <-> "seg2",
+  0b010     <-> "seg3",
+  0b011     <-> "seg4",
+  0b100     <-> "seg5",
+  0b101     <-> "seg6",
+  0b110     <-> "seg7",
+  0b111     <-> "seg8"
 }
 
 mapping vlewidth_bitsnumberstr : vlewidth <-> string = {
@@ -98,558 +98,7 @@ mapping bytes_wordwidth : {|1, 2, 4, 8|} <-> word_width = {
   8 <-> DOUBLE
 }
 
-/* ******************** Vector Load Unit-Stride Normal (nf=0, mop=0, lumop=0) ******************** */
-union clause ast = VLETYPE : (bits(1), regidx, vlewidth, regidx)
-
-mapping clause encdec = VLETYPE(vm, rs1, width, vd) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b00 @ vm @ 0b00000 @ rs1 @ encdec_vlewidth(width) @ vd @ 0b0000111 if haveRVV()
-
-val process_vle : forall 'b 'n 'p, ('b in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('b), regidx, int('p), int('n)) -> Retired effect {escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vle (vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem) = {
-  let width_type : word_width = bytes_wordwidth(load_width_bytes);
-  let vm_val : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vd_val : vector('n, dec, bits('b * 8)) = read_vreg(num_elem, load_width_bytes * 8, EMUL_pow, vd);
-
-  let (total, mask) = init_masked_result(num_elem, load_width_bytes * 8, EMUL_pow, vd_val, vm_val);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = i * load_width_bytes;
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
-        Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) => 
-          if check_misaligned(vaddr, width_type)
-          then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
-          else match translateAddr(vaddr, Read(Data)) {
-            TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-            TR_Address(paddr, _) => {
-              match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, result),
-                MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-              }
-            }
-          }
-      }
-    } else { /* prestart, masked or tail elements */
-      write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, total[i])
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VLETYPE(vm, rs1, width, vd)) = {
-  let load_width_bytes = vlewidth_bytesnumber(width);
-  let EEW = load_width_bytes * 8;
-  let EEW_pow = vlewidth_pow(width);
-  let SEW_pow = get_sew_pow();
-  let LMUL_pow = get_lmul_pow();
-  let EMUL_pow = EEW_pow - SEW_pow + LMUL_pow;
-  let num_elem = get_num_elem(EMUL_pow, EEW);
-
-  if illegal_normal(vd, vm) then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vle(vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
-}
-
-mapping vletype_mnemonic : vlewidth <-> string = {
-  VLE8        <-> "vle8.v",
-  VLE16       <-> "vle16.v",
-  VLE32       <-> "vle32.v",
-  VLE64       <-> "vle64.v"
-}
-
-mapping clause assembly = VLETYPE(vm, rs1, width, vd)
-  <-> vletype_mnemonic(width) ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
-
-/* ******************** Vector Store Unit-Stride Normal (nf=0, mop=0, sumop=0) ******************* */
-union clause ast = VSETYPE : (bits(1), regidx, vlewidth, regidx)
-
-mapping clause encdec = VSETYPE(vm, rs1, width, vs3) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b00 @ vm @ 0b00000 @ rs1 @ encdec_vlewidth(width) @ vs3 @ 0b0100111 if haveRVV()
-
-val process_vse : forall 'b 'n 'p, ('b in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('b), regidx, int('p), int('n)) -> Retired effect {eamem, escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vse (vm, vs3, load_width_bytes, rs1, EMUL_pow, num_elem) = {
-  let width_type : word_width = bytes_wordwidth(load_width_bytes);
-  let vm_val  : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vs3_val : vector('n, dec, bits('b * 8)) = read_vreg(num_elem, load_width_bytes * 8, EMUL_pow, vs3);
-  let mask    : vector('n, dec, bool) = init_masked_source(num_elem, EMUL_pow, vm_val);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = i * load_width_bytes;
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Write(Data), width_type) {
-        Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) =>
-          if check_misaligned(vaddr, width_type)
-          then { handle_mem_exception(vaddr, E_SAMO_Addr_Align()); return RETIRE_FAIL }
-          else match translateAddr(vaddr, Write(Data)) {
-            TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-            TR_Address(paddr, _) => {
-              let eares : MemoryOpResult(unit) = mem_write_ea(paddr, load_width_bytes, false, false, false);
-              match (eares) {
-                MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-                MemValue(_) => {
-                  let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, vs3_val[i], false, false, false);
-                  match (res) {
-                    MemValue(true)  => (),
-                    MemValue(false) => internal_error(__FILE__, __LINE__, "store got false from mem_write_value"),
-                    MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-                  }
-                }
-              }
-            }
-          }
-      }
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VSETYPE(vm, rs1, width, vs3)) = {
-  let load_width_bytes = vlewidth_bytesnumber(width);
-  let EEW = load_width_bytes * 8;
-  let EEW_pow = vlewidth_pow(width);
-  let SEW_pow = get_sew_pow();
-  let LMUL_pow = get_lmul_pow();
-  let EMUL_pow = EEW_pow - SEW_pow + LMUL_pow;
-  let num_elem = get_num_elem(EMUL_pow, EEW);
-
-  if illegal_vd_unmasked() then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vse(vm, vs3, load_width_bytes, rs1, EMUL_pow, num_elem)
-}
-
-mapping vsetype_mnemonic : vlewidth <-> string = {
-  VLE8        <-> "vse8.v",
-  VLE16       <-> "vse16.v",
-  VLE32       <-> "vse32.v",
-  VLE64       <-> "vse64.v"
-}
-
-mapping clause assembly = VSETYPE(vm, rs1, width, vs3)
-  <-> vsetype_mnemonic(width) ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
-
-/* ************************** Vector Load Strided Normal (nf=0, mop=10) ************************** */
-union clause ast = VLSETYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VLSETYPE(vm, rs2, rs1, width, vd) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b10 @ vm @ rs2 @ rs1 @ encdec_vlewidth(width) @ vd @ 0b0000111 if haveRVV()
-
-val process_vlse : forall 'b 'n 'p, ('b in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('b), regidx, regidx, int('p), int('n)) -> Retired effect {escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vlse (vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_elem) = {
-  let width_type : word_width = bytes_wordwidth(load_width_bytes);
-  let vm_val  : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vd_val  : vector('n, dec, bits('b * 8)) = read_vreg(num_elem, load_width_bytes * 8, EMUL_pow, vd);
-  let rs2_val : int = signed(get_scalar(rs2, sizeof(xlen)));
-
-  let (total, mask) = init_masked_result(num_elem, load_width_bytes * 8, EMUL_pow, vd_val, vm_val);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = i * rs2_val;
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
-        Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) => 
-          if check_misaligned(vaddr, width_type)
-          then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
-          else match translateAddr(vaddr, Read(Data)) {
-            TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-            TR_Address(paddr, _) => {
-              match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, result),
-                MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-              }
-            }
-          }
-      }
-    } else { /* prestart, masked or tail elements */
-      write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, total[i])
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VLSETYPE(vm, rs2, rs1, width, vd)) = {
-  let load_width_bytes = vlewidth_bytesnumber(width);
-  let EEW = load_width_bytes * 8;
-  let EEW_pow = vlewidth_pow(width);
-  let SEW_pow = get_sew_pow();
-  let LMUL_pow = get_lmul_pow();
-  let EMUL_pow = EEW_pow - SEW_pow + LMUL_pow;
-  let num_elem = get_num_elem(EMUL_pow, EEW);
-
-  if illegal_normal(vd, vm) then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vlse(vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_elem)
-}
-
-mapping vlsetype_mnemonic : vlewidth <-> string = {
-  VLE8        <-> "vlse8.v",
-  VLE16       <-> "vlse16.v",
-  VLE32       <-> "vlse32.v",
-  VLE64       <-> "vlse64.v"
-}
-
-mapping clause assembly = VLSETYPE(vm, rs2, rs1, width, vd)
-  <-> vlsetype_mnemonic(width) ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2)^ maybe_vmask(vm)
-
-/* ************************** Vector Store Strided Normal (nf=0, mop=10) ************************* */
-union clause ast = VSSETYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VSSETYPE(vm, rs2, rs1, width, vs3) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b10 @ vm @ rs2 @ rs1 @ encdec_vlewidth(width) @ vs3 @ 0b0100111 if haveRVV()
-
-val process_vsse : forall 'b 'n 'p, ('b in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('b), regidx, regidx, int('p), int('n)) -> Retired effect {eamem, escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vsse (vm, vs3, load_width_bytes, rs1, rs2, EMUL_pow, num_elem) = {
-  let width_type : word_width = bytes_wordwidth(load_width_bytes);
-  let vm_val  : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vs3_val : vector('n, dec, bits('b * 8)) = read_vreg(num_elem, load_width_bytes * 8, EMUL_pow, vs3);
-  let rs2_val : int = signed(get_scalar(rs2, sizeof(xlen)));
-  let mask    : vector('n, dec, bool) = init_masked_source(num_elem, EMUL_pow, vm_val);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = i * rs2_val;
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Write(Data), width_type) {
-        Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) =>
-          if check_misaligned(vaddr, width_type)
-          then { handle_mem_exception(vaddr, E_SAMO_Addr_Align()); return RETIRE_FAIL }
-          else match translateAddr(vaddr, Write(Data)) {
-            TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-            TR_Address(paddr, _) => {
-              let eares : MemoryOpResult(unit) = mem_write_ea(paddr, load_width_bytes, false, false, false);
-              match (eares) {
-                MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-                MemValue(_) => {
-                  let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, vs3_val[i], false, false, false);
-                  match (res) {
-                    MemValue(true)  => (),
-                    MemValue(false) => internal_error(__FILE__, __LINE__, "store got false from mem_write_value"),
-                    MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-                  }
-                }
-              }
-            }
-          }
-      }
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VSSETYPE(vm, rs2, rs1, width, vs3)) = {
-  let load_width_bytes = vlewidth_bytesnumber(width);
-  let EEW = load_width_bytes * 8;
-  let EEW_pow = vlewidth_pow(width);
-  let SEW_pow = get_sew_pow();
-  let LMUL_pow = get_lmul_pow();
-  let EMUL_pow = EEW_pow - SEW_pow + LMUL_pow;
-  let num_elem = get_num_elem(EMUL_pow, EEW);
-
-  if illegal_vd_unmasked() then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vsse(vm, vs3, load_width_bytes, rs1, rs2, EMUL_pow, num_elem)
-}
-
-mapping vssetype_mnemonic : vlewidth <-> string = {
-  VLE8        <-> "vsse8.v",
-  VLE16       <-> "vsse16.v",
-  VLE32       <-> "vsse32.v",
-  VLE64       <-> "vsse64.v"
-}
-
-mapping clause assembly = VSSETYPE(vm, rs2, rs1, width, vs3)
-  <-> vssetype_mnemonic(width) ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2)^ maybe_vmask(vm)
-
-/* ************************ Vector Load Indexed Unordered (nf=0, mop=01) ************************* */
-union clause ast = VLUXEITYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VLUXEITYPE(vm, vs2, rs1, width, vd) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b01 @ vm @ vs2 @ rs1 @ encdec_vlewidth(width) @ vd @ 0b0000111 if haveRVV()
-
-val process_vlxei : forall 'ib 'db 'ip 'dp 'n, ('ib in {1, 2, 4, 8}) & ('db in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('ib), int('db), int('ip), int('dp), regidx, regidx, int('n), int) -> Retired effect {escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vlxei (vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, mop) = {
-  let width_type : word_width = bytes_wordwidth(EEW_data_bytes);
-  let vm_val  : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vd_val  : vector('n, dec, bits('db * 8)) = read_vreg(num_elem, EEW_data_bytes * 8, EMUL_data_pow, vd);
-  let vs2_val : vector('n, dec, bits('ib * 8)) = read_vreg(num_elem, EEW_index_bytes * 8, EMUL_index_pow, vs2);
-
-  let (total, mask) = init_masked_result(num_elem, EEW_data_bytes * 8, EMUL_data_pow, vd_val, vm_val);
-
-  /* currently mop = 1 (unordered) or 3 (ordered) do the same operations */
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = signed(vs2_val[i]);
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
-        Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) => 
-          if check_misaligned(vaddr, width_type) then
-            { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
-          else match translateAddr(vaddr, Read(Data)) {
-            TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-            TR_Address(paddr, _) => {
-              match mem_read(Read(Data), paddr, EEW_data_bytes, false, false, false) {
-                MemValue(result) => write_single_element(EEW_data_bytes * 8, i, EMUL_data_pow, vd, result),
-                MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-              }
-            }
-          }
-      }
-    } else { /* prestart, masked or tail elements */
-      write_single_element(EEW_data_bytes * 8, i, EMUL_data_pow, vd, total[i])
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VLUXEITYPE(vm, vs2, rs1, width, vd)) = {
-  let EEW_index_pow = vlewidth_pow(width);
-  let EEW_index_bytes = vlewidth_bytesnumber(width);
-  let EEW_data_pow = get_sew_pow();
-  let EEW_data_bytes = get_sew_bytes();
-  let EMUL_data_pow = get_lmul_pow();
-  let EMUL_index_pow = EEW_index_pow - EEW_data_pow + EMUL_data_pow;
-  let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8);
-
-  if illegal_normal(vd, vm) then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vlxei(vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 1)
-}
-
-mapping clause assembly = VLUXEITYPE(vm, vs2, rs1, width, vd)
-  <-> "vluxei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
-
-/* ************************* Vector Load Indexed Ordered (nf=0, mop=11) ************************** */
-union clause ast = VLOXEITYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VLOXEITYPE(vm, vs2, rs1, width, vd) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b11 @ vm @ vs2 @ rs1 @ encdec_vlewidth(width) @ vd @ 0b0000111 if haveRVV()
-
-function clause execute(VLOXEITYPE(vm, vs2, rs1, width, vd)) = {
-  let EEW_index_pow = vlewidth_pow(width);
-  let EEW_index_bytes = vlewidth_bytesnumber(width);
-  let EEW_data_pow = get_sew_pow();
-  let EEW_data_bytes = get_sew_bytes();
-  let EMUL_data_pow = get_lmul_pow();
-  let EMUL_index_pow = EEW_index_pow - EEW_data_pow + EMUL_data_pow;
-  let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8);
-
-  if illegal_normal(vd, vm) then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vlxei(vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 3)
-}
-
-mapping clause assembly = VLOXEITYPE(vm, vs2, rs1, width, vd)
-  <-> "vloxei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
-
-/* ************************ Vector Store Indexed Unordered (nf=0, mop=01) ************************ */
-union clause ast = VSUXEITYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VSUXEITYPE(vm, vs2, rs1, width, vs3) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b01 @ vm @ vs2 @ rs1 @ encdec_vlewidth(width) @ vs3 @ 0b0100111 if haveRVV()
-
-val process_vsxei : forall 'ib 'db 'ip 'dp 'n, ('ib in {1, 2, 4, 8}) & ('db in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('ib), int('db), int('ip), int('dp), regidx, regidx, int('n), int) -> Retired effect {eamem, escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vsxei (vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, mop) = {
-  let width_type : word_width = bytes_wordwidth(EEW_data_bytes);
-  let vm_val  : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vs3_val : vector('n, dec, bits('db * 8)) = read_vreg(num_elem, EEW_data_bytes * 8, EMUL_data_pow, vs3);
-  let vs2_val : vector('n, dec, bits('ib * 8)) = read_vreg(num_elem, EEW_index_bytes * 8, EMUL_index_pow, vs2);
-  let mask    : vector('n, dec, bool) = init_masked_source(num_elem, EMUL_data_pow, vm_val);
-
-  /* currently mop = 1 (unordered) or 3 (ordered) do the same operations */
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then { /* active elements */
-      vstart = to_bits(16, i);
-      let elem_offset = signed(vs2_val[i]);
-      match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Write(Data), width_type) {
-          Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-          Ext_DataAddr_OK(vaddr) =>
-            if check_misaligned(vaddr, width_type)
-            then { handle_mem_exception(vaddr, E_SAMO_Addr_Align()); return RETIRE_FAIL }
-            else match translateAddr(vaddr, Write(Data)) {
-              TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-              TR_Address(paddr, _) => {
-                let eares : MemoryOpResult(unit) = mem_write_ea(paddr, EEW_data_bytes, false, false, false);
-                match (eares) {
-                  MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
-                  MemValue(_) => {
-                    let res : MemoryOpResult(bool) = mem_write_value(paddr, EEW_data_bytes, vs3_val[i], false, false, false);
-                    match (res) {
-                      MemValue(true)  => (),
-                      MemValue(false) => internal_error(__FILE__, __LINE__, "store got false from mem_write_value"),
-                      MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-                    }
-                  }
-                }
-              }
-            }
-      }
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VSUXEITYPE(vm, vs2, rs1, width, vs3)) = {
-  let EEW_index_pow = vlewidth_pow(width);
-  let EEW_index_bytes = vlewidth_bytesnumber(width);
-  let EEW_data_pow = get_sew_pow();
-  let EEW_data_bytes = get_sew_bytes();
-  let EMUL_data_pow = get_lmul_pow();
-  let EMUL_index_pow = EEW_index_pow - EEW_data_pow + EMUL_data_pow;
-  let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8); /* number of data and indices are the same */
-
-  if illegal_vd_unmasked() then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vsxei(vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 1)
-}
-
-mapping clause assembly = VSUXEITYPE(vm, vs2, rs1, width, vs3)
-  <-> "vsuxei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
-
-/* ************************* Vector Store Indexed Ordered (nf=0, mop=11) ************************* */
-union clause ast = VSOXEITYPE : (bits(1), regidx, regidx, vlewidth, regidx)
-
-mapping clause encdec = VSOXEITYPE(vm, vs2, rs1, width, vs3) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b11 @ vm @ vs2 @ rs1 @ encdec_vlewidth(width) @ vs3 @ 0b0100111 if haveRVV()
-
-function clause execute(VSOXEITYPE(vm, vs2, rs1, width, vs3)) = {
-  let EEW_index_pow = vlewidth_pow(width);
-  let EEW_index_bytes = vlewidth_bytesnumber(width);
-  let EEW_data_pow = get_sew_pow();
-  let EEW_data_bytes = get_sew_bytes();
-  let EMUL_data_pow = get_lmul_pow();
-  let EMUL_index_pow = EEW_index_pow - EEW_data_pow + EMUL_data_pow;
-  let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8); /* number of data and indices are the same */
-
-  if illegal_vd_unmasked() then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vsxei(vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 3)
-}
-
-mapping clause assembly = VSOXEITYPE(vm, vs2, rs1, width, vs3)
-  <-> "vsoxei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
-
-/* ************* Vector Load Unit-Stride Fault-Only-First (nf=0, mop=0, lumop=10000) ************* */
-union clause ast = VLEFFTYPE : (bits(1), regidx, vlewidth, regidx)
-
-mapping clause encdec = VLEFFTYPE(vm, rs1, width, vd) if haveRVV()
-  <-> 0b000 @ 0b0 @ 0b00 @ vm @ 0b10000 @ rs1 @ encdec_vlewidth(width) @ vd @ 0b0000111 if haveRVV()
-
-val process_vleff : forall 'b 'n 'p, ('b in {1, 2, 4, 8}) & ('n >= 0). (bits(1), regidx, int('b), regidx, int('p), int('n)) -> Retired effect {escape, rmem, rmemt, rreg, undef, wmv, wmvt, wreg}
-function process_vleff (vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem) = {
-  let width_type : word_width = bytes_wordwidth(load_width_bytes);
-  let vm_val : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
-  let vd_val : vector('n, dec, bits('b * 8)) = read_vreg(num_elem, load_width_bytes * 8, EMUL_pow, vd);
-  let tail_ag : agtype = get_vtype_vta();
-
-  let (total, mask) = init_masked_result(num_elem, load_width_bytes * 8, EMUL_pow, vd_val, vm_val);
-
-  trimmed : bool = false;
-  foreach (i from 0 to (num_elem - 1)) {
-    if not(trimmed) then {
-      if mask[i] then { /* active elements */
-        let elem_offset = i * load_width_bytes;
-        match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
-          Ext_DataAddr_Error(e) => {
-            if i == 0 then { ext_handle_data_check_error(e); return RETIRE_FAIL }
-            else {
-              vl = to_bits(sizeof(xlen), i);
-              print_reg("CSR vl <- " ^ BitStr(vl));
-              trimmed = true
-            }
-          },
-          Ext_DataAddr_OK(vaddr) => {
-            if check_misaligned(vaddr, width_type) then {
-              if i == 0 then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
-              else {
-                vl = to_bits(sizeof(xlen), i);
-                print_reg("CSR vl <- " ^ BitStr(vl));
-                trimmed = true
-              }
-            } else match translateAddr(vaddr, Read(Data)) {
-              TR_Failure(e, _) => { 
-                if i == 0 then { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-                else {
-                  vl = to_bits(sizeof(xlen), i);
-                  print_reg("CSR vl <- " ^ BitStr(vl));
-                  trimmed = true
-                }
-              },
-              TR_Address(paddr, _) => {
-                match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                  MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, result),
-                  MemException(e)  => {
-                    if i == 0 then { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
-                    else {
-                      vl = to_bits(sizeof(xlen), i);
-                      print_reg("CSR vl <- " ^ BitStr(vl));
-                      trimmed = true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      } else { /* prestart, masked or tail elements */
-        write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, total[i])
-      }
-    } else {
-      /* if vl is trimmed, elements past the new vl are treated as tail elements */
-      if tail_ag == AGNOSTIC then {
-        write_single_element(load_width_bytes * 8, i, EMUL_pow, vd, vd_val[i]) 
-        /* TODO: configuration support for agnostic behavior */
-      }
-    }
-  };
-
-  vstart = EXTZ(0b0);
-  RETIRE_SUCCESS
-}
-
-function clause execute(VLEFFTYPE(vm, rs1, width, vd)) = {
-  let load_width_bytes = vlewidth_bytesnumber(width);
-  let EEW = load_width_bytes * 8;
-  let EEW_pow = vlewidth_pow(width);
-  let SEW_pow = get_sew_pow();
-  let LMUL_pow = get_lmul_pow();
-  let EMUL_pow = EEW_pow - SEW_pow + LMUL_pow;
-  let num_elem = get_num_elem(EMUL_pow, EEW);
-
-  if illegal_normal(vd, vm) then { handle_illegal(); return RETIRE_FAIL };
-
-  process_vleff(vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
-}
-
-mapping vlefftype_mnemonic : vlewidth <-> string = {
-  VLE8        <-> "vle8ff.v",
-  VLE16       <-> "vle16ff.v",
-  VLE32       <-> "vle32ff.v",
-  VLE64       <-> "vle64ff.v"
-}
-
-mapping clause assembly = VLEFFTYPE(vm, rs1, width, vd)
-  <-> vlefftype_mnemonic(width) ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
-
-/* ******************** Vector Load Unit-Stride Segment (mop=0, lumop=00000) ********************* */
+/* ******************** Vector Load Unit-Stride Normal & Segment (mop=0b00, lumop=0b00000) ********************* */
 union clause ast = VLSEGTYPE : (bits(3), bits(1), regidx, vlewidth, regidx)
 
 mapping clause encdec = VLSEGTYPE(nf, vm, rs1, width, vd) if haveRVV()
@@ -662,7 +111,7 @@ function process_vlseg (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem) =
   let vm_val : vector('n, dec, bool) = read_vmask(num_elem, vm, 0b00000);
   let vd_seg : vector('n, dec, bits('f * 'b * 8)) = read_vreg_seg(num_elem, load_width_bytes * 8, EMUL_pow, nf, vd);
 
-  let (total, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
+  let (result, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
 
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] then { /* active segments */
@@ -671,14 +120,14 @@ function process_vlseg (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem) =
         let elem_offset = (i * nf + j) * load_width_bytes;
         match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
           Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-          Ext_DataAddr_OK(vaddr) => 
+          Ext_DataAddr_OK(vaddr) =>
               if check_misaligned(vaddr, width_type)
               then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
               else match translateAddr(vaddr, Read(Data)) {
                 TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
                 TR_Address(paddr, _) => {
                   match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                    MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), result),
+                    MemValue(elem)   => write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), elem),
                     MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                   }
                 }
@@ -687,13 +136,13 @@ function process_vlseg (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem) =
       }
     } else { /* prestart, masked or tail segments */
       foreach (j from 0 to (nf - 1)) {
-        let elem_val = (total[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
-        write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), elem_val)
+        let skipped_elem = (result[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
+        write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), skipped_elem)
       }
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -707,15 +156,15 @@ function clause execute(VLSEGTYPE(nf, vm, rs1, width, vd)) = {
   let num_elem = get_num_elem(EMUL_pow, EEW); /* # of element of each register group */
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_load(vd, vm, nf_int, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_load(vd, vm, nf_int, EEW, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vlseg(nf_int, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
 }
 
 mapping clause assembly = VLSEGTYPE(nf, vm, rs1, width, vd)
-  <-> "vlseg" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
+  <-> "vl" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
 
-/* ************ Vector Load Unit-Stride Segment Fault-Only-First (mop=0, lumop=10000) ************ */
+/* ************ Vector Load Unit-Stride Normal & Segment Fault-Only-First (mop=0b00, lumop=0b10000) ************ */
 union clause ast = VLSEGFFTYPE : (bits(3), bits(1), regidx, vlewidth, regidx)
 
 mapping clause encdec = VLSEGFFTYPE(nf, vm, rs1, width, vd) if haveRVV()
@@ -729,7 +178,7 @@ function process_vlsegff (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
   let vd_seg : vector('n, dec, bits('f * 'b * 8)) = read_vreg_seg(num_elem, load_width_bytes * 8, EMUL_pow, nf, vd);
   let tail_ag : agtype = get_vtype_vta();
 
-  let (total, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
+  let (result, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
 
   trimmed : bool = false;
   foreach (i from 0 to (num_elem - 1)) {
@@ -738,7 +187,7 @@ function process_vlsegff (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
         foreach (j from 0 to (nf - 1)) {
           let elem_offset = (i * nf + j) * load_width_bytes;
           match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
-            Ext_DataAddr_Error(e)  => { 
+            Ext_DataAddr_Error(e)  => {
               if i == 0 then { ext_handle_data_check_error(e); return RETIRE_FAIL }
               else {
                 vl = to_bits(sizeof(xlen), i);
@@ -755,7 +204,7 @@ function process_vlsegff (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
                   trimmed = true
                 }
               } else match translateAddr(vaddr, Read(Data)) {
-                TR_Failure(e, _)     => { 
+                TR_Failure(e, _)     => {
                   if i == 0 then { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                   else {
                     vl = to_bits(sizeof(xlen), i);
@@ -765,8 +214,8 @@ function process_vlsegff (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
                 },
                 TR_Address(paddr, _) => {
                   match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                    MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), result),
-                    MemException(e)  => { 
+                    MemValue(elem)   => write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), elem),
+                    MemException(e)  => {
                       if i == 0 then { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                       else {
                         vl = to_bits(sizeof(xlen), i);
@@ -782,23 +231,23 @@ function process_vlsegff (nf, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
         }
       } else { /* prestart, masked or tail segments */
         foreach (j from 0 to (nf - 1)) {
-          let elem_val = (total[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
-          write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), elem_val)
+          let skipped_elem = (result[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
+          write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), skipped_elem)
         }
       }
     } else {
       /* if vl is trimmed, elements past the new vl are treated as tail elements */
       if tail_ag == AGNOSTIC then {
         foreach (j from 0 to (nf - 1)) {
-          let elem_val = (vd_seg[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
-          write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), elem_val)
+          let skipped_elem = (vd_seg[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
+          write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), skipped_elem)
         }
         /* TODO: configuration support for agnostic behavior */
       }
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -812,15 +261,15 @@ function clause execute(VLSEGFFTYPE(nf, vm, rs1, width, vd)) = {
   let num_elem = get_num_elem(EMUL_pow, EEW);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_load(vd, vm, nf_int, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_load(vd, vm, nf_int, EEW, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vlsegff(nf_int, vm, vd, load_width_bytes, rs1, EMUL_pow, num_elem)
 }
 
-mapping clause assembly = VLSEGTYPE(nf, vm, rs1, width, vd)
-  <-> "vlseg" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ "ff.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
+mapping clause assembly = VLSEGFFTYPE(nf, vm, rs1, width, vd)
+  <-> "vl" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ "ff.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
 
-/* ******************** Vector Store Unit-Stride Segment (mop=0, sumop=00000) ******************** */
+/* ******************** Vector Store Unit-Stride Normal & Segment (mop=0b00, sumop=0b00000) ******************** */
 union clause ast = VSSEGTYPE : (bits(3), bits(1), regidx, vlewidth, regidx)
 
 mapping clause encdec = VSSEGTYPE(nf, vm, rs1, width, vs3) if haveRVV()
@@ -851,7 +300,7 @@ function process_vsseg (nf, vm, vs3, load_width_bytes, rs1, EMUL_pow, num_elem) 
                 match (eares) {
                   MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
                   MemValue(_) => {
-                    let elem_val : bits('b * 8) = read_single_element(load_width_bytes * 8, i, EMUL_pow, vs3 + to_bits(5, j * EMUL_reg));
+                    let elem_val : bits('b * 8) = read_single_element(load_width_bytes * 8, i, vs3 + to_bits(5, j * EMUL_reg));
                     let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, elem_val, false, false, false);
                     match (res) {
                       MemValue(true)  => (),
@@ -867,7 +316,7 @@ function process_vsseg (nf, vm, vs3, load_width_bytes, rs1, EMUL_pow, num_elem) 
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -881,15 +330,15 @@ function clause execute(VSSEGTYPE(nf, vm, rs1, width, vs3)) = {
   let num_elem = get_num_elem(EMUL_pow, EEW);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_store(nf_int, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_store(nf_int, EEW, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vsseg(nf_int, vm, vs3, load_width_bytes, rs1, EMUL_pow, num_elem)
 }
 
 mapping clause assembly = VSSEGTYPE(nf, vm, rs1, width, vs3)
-  <-> "vsseg" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
+  <-> "vs" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ maybe_vmask(vm)
 
-/* **************************** Vector Load Strided Segment (mop=10) ***************************** */
+/* ****************************** Vector Load Strided Normal & Segment (mop=0b10) ****************************** */
 union clause ast = VLSSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VLSSEGTYPE(nf, vm, rs2, rs1, width, vd) if haveRVV()
@@ -903,7 +352,7 @@ function process_vlsseg (nf, vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_e
   let vd_seg  : vector('n, dec, bits('f * 'b * 8)) = read_vreg_seg(num_elem, load_width_bytes * 8, EMUL_pow, nf, vd);
   let rs2_val : int = signed(get_scalar(rs2, sizeof(xlen)));
 
-  let (total, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
+  let (result, mask) = init_masked_result(num_elem, nf * load_width_bytes * 8, EMUL_pow, vd_seg, vm_val);
 
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] then { /* active segments */
@@ -912,14 +361,14 @@ function process_vlsseg (nf, vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_e
         let elem_offset = i * rs2_val + j * load_width_bytes;
         match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
           Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-          Ext_DataAddr_OK(vaddr) => 
+          Ext_DataAddr_OK(vaddr) =>
             if check_misaligned(vaddr, width_type)
             then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
             else match translateAddr(vaddr, Read(Data)) {
               TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
               TR_Address(paddr, _) => {
                 match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                  MemValue(result) => write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), result),
+                  MemValue(elem)   => write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), elem),
                   MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                 }
               }
@@ -928,13 +377,13 @@ function process_vlsseg (nf, vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_e
       }
     } else { /* prestart, masked or tail segments */
       foreach (j from 0 to (nf - 1)) {
-        let elem_val = (total[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
-        write_single_element(load_width_bytes * 8, i, EMUL_pow, vd + to_bits(5, j * EMUL_reg), elem_val)
+        let skipped_elem = (result[i] >> (j * load_width_bytes * 8))[(load_width_bytes * 8 - 1) .. 0];
+        write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j * EMUL_reg), skipped_elem)
       }
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -948,15 +397,15 @@ function clause execute(VLSSEGTYPE(nf, vm, rs2, rs1, width, vd)) = {
   let num_elem = get_num_elem(EMUL_pow, EEW);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_load(vd, vm, nf_int, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_load(vd, vm, nf_int, EEW, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vlsseg(nf_int, vm, vd, load_width_bytes, rs1, rs2, EMUL_pow, num_elem)
 }
 
 mapping clause assembly = VLSSEGTYPE(nf, vm, rs2, rs1, width, vd)
-  <-> "vlsseg" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2) ^ maybe_vmask(vm)
+  <-> "vls" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2) ^ maybe_vmask(vm)
 
-/* **************************** Vector Store Strided Segment (mop=10) **************************** */
+/* ***************************** Vector Store Strided Normal & Segment (mop=0b10) ****************************** */
 union clause ast = VSSSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VSSSEGTYPE(nf, vm, rs2, rs1, width, vs3) if haveRVV()
@@ -988,7 +437,7 @@ function process_vssseg (nf, vm, vs3, load_width_bytes, rs1, rs2, EMUL_pow, num_
                 match (eares) {
                   MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
                   MemValue(_) => {
-                    let elem_val : bits('b * 8) = read_single_element(load_width_bytes * 8, i, EMUL_pow, vs3 + to_bits(5, j * EMUL_reg));
+                    let elem_val : bits('b * 8) = read_single_element(load_width_bytes * 8, i, vs3 + to_bits(5, j * EMUL_reg));
                     let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, elem_val, false, false, false);
                     match (res) {
                       MemValue(true)  => (),
@@ -1004,7 +453,7 @@ function process_vssseg (nf, vm, vs3, load_width_bytes, rs1, rs2, EMUL_pow, num_
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1018,15 +467,15 @@ function clause execute(VSSSEGTYPE(nf, vm, rs2, rs1, width, vs3)) = {
   let num_elem = get_num_elem(EMUL_pow, EEW);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_store(nf_int, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_store(nf_int, EEW, EMUL_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vssseg(nf_int, vm, vs3, load_width_bytes, rs1, rs2, EMUL_pow, num_elem)
 }
 
 mapping clause assembly = VSSSEGTYPE(nf, vm, rs2, rs1, width, vs3)
-  <-> "vssseg" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2) ^ maybe_vmask(vm)
+  <-> "vss" ^ nfields_string(nf) ^ "e" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(rs2) ^ maybe_vmask(vm)
 
-/* *********************** Vector Load Indexed Unordered Segment (mop=01) ************************ */
+/* ************************* Vector Load Indexed Unordered Normal & Segment (mop=0b01) ************************* */
 union clause ast = VLUXSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VLUXSEGTYPE(nf, vm, vs2, rs1, width, vd) if haveRVV()
@@ -1040,7 +489,7 @@ function process_vlxseg (nf, vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index
   let vd_seg  : vector('n, dec, bits('f * 'db * 8)) = read_vreg_seg(num_elem, EEW_data_bytes * 8, EMUL_data_pow, nf, vd);
   let vs2_val : vector('n, dec, bits('ib * 8)) = read_vreg(num_elem, EEW_index_bytes * 8, EMUL_index_pow, vs2);
 
-  let (total, mask) = init_masked_result(num_elem, nf * EEW_data_bytes * 8, EMUL_data_pow, vd_seg, vm_val);
+  let (result, mask) = init_masked_result(num_elem, nf * EEW_data_bytes * 8, EMUL_data_pow, vd_seg, vm_val);
 
   /* currently mop = 1 (unordered) or 3 (ordered) do the same operations */
   foreach (i from 0 to (num_elem - 1)) {
@@ -1050,14 +499,14 @@ function process_vlxseg (nf, vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index
         let elem_offset : int = signed(vs2_val[i]) + j * EEW_data_bytes;
         match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
           Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-          Ext_DataAddr_OK(vaddr) => 
+          Ext_DataAddr_OK(vaddr) =>
             if check_misaligned(vaddr, width_type)
             then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
             else match translateAddr(vaddr, Read(Data)) {
               TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
               TR_Address(paddr, _) => {
                 match mem_read(Read(Data), paddr, EEW_data_bytes, false, false, false) {
-                  MemValue(result) => write_single_element(EEW_data_bytes * 8, i, EMUL_data_pow, vd + to_bits(5, j * EMUL_data_reg), result),
+                  MemValue(elem)   => write_single_element(EEW_data_bytes * 8, i, vd + to_bits(5, j * EMUL_data_reg), elem),
                   MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                 }
               }
@@ -1066,13 +515,13 @@ function process_vlxseg (nf, vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index
       }
     } else { /* prestart, masked or tail segments */
       foreach (j from 0 to (nf - 1)) {
-        let elem_val = (total[i] >> (j * EEW_data_bytes * 8))[(EEW_data_bytes * 8 - 1) .. 0];
-        write_single_element(EEW_data_bytes * 8, i, EMUL_data_pow, vd + to_bits(5, j * EMUL_data_reg), elem_val)
+        let skipped_elem = (result[i] >> (j * EEW_data_bytes * 8))[(EEW_data_bytes * 8 - 1) .. 0];
+        write_single_element(EEW_data_bytes * 8, i, vd + to_bits(5, j * EMUL_data_reg), skipped_elem)
       }
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1086,15 +535,15 @@ function clause execute(VLUXSEGTYPE(nf, vm, vs2, rs1, width, vd)) = {
   let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_load(vd, vm, nf_int, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_indexed_load(vd, vm, nf_int, EEW_index_bytes * 8, EMUL_index_pow, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vlxseg(nf_int, vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 1)
 }
 
 mapping clause assembly = VLUXSEGTYPE(nf, vm, vs2, rs1, width, vd)
-  <-> "vluxseg" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
+  <-> "vlux" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
 
-/* ************************ Vector Load Indexed Ordered Segment (mop=11) ************************* */
+/* ************************** Vector Load Indexed Ordered Normal & Segment (mop=0b11) ************************** */
 union clause ast = VLOXSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VLOXSEGTYPE(nf, vm, vs2, rs1, width, vd) if haveRVV()
@@ -1110,15 +559,15 @@ function clause execute(VLOXSEGTYPE(nf, vm, vs2, rs1, width, vd)) = {
   let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8);
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_load(vd, vm, nf_int, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_indexed_load(vd, vm, nf_int, EEW_index_bytes * 8, EMUL_index_pow, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vlxseg(nf_int, vm, vd, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 3)
 }
 
 mapping clause assembly = VLOXSEGTYPE(nf, vm, vs2, rs1, width, vd)
-  <-> "vloxseg" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
+  <-> "vlox" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
 
-/* *********************** Vector Store Indexed Unordered Segment (mop=01) *********************** */
+/* ************************ Vector Store Indexed Unordered Normal & Segment (mop=0b01) ************************* */
 union clause ast = VSUXSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VSUXSEGTYPE(nf, vm, vs2, rs1, width, vs3) if haveRVV()
@@ -1151,7 +600,7 @@ function process_vsxseg (nf, vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_inde
                 match (eares) {
                   MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
                   MemValue(_) => {
-                    let elem_val : bits('db * 8) = read_single_element(EEW_data_bytes * 8, i, EMUL_data_pow, vs3 + to_bits(5, j * EMUL_data_reg));
+                    let elem_val : bits('db * 8) = read_single_element(EEW_data_bytes * 8, i, vs3 + to_bits(5, j * EMUL_data_reg));
                     let res : MemoryOpResult(bool) = mem_write_value(paddr, EEW_data_bytes, elem_val, false, false, false);
                     match (res) {
                       MemValue(true)  => (),
@@ -1167,7 +616,7 @@ function process_vsxseg (nf, vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_inde
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1181,15 +630,15 @@ function clause execute(VSUXSEGTYPE(nf, vm, vs2, rs1, width, vs3)) = {
   let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8); /* number of data and indices are the same */
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_store(nf_int, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_indexed_store(nf_int, EEW_index_bytes * 8, EMUL_index_pow, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vsxseg(nf_int, vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 1)
 }
 
 mapping clause assembly = VSUXSEGTYPE(nf, vm, vs2, rs1, width, vs3)
-  <-> "vsuxseg" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
+  <-> "vsux" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
 
-/* ************************ Vector Store Indexed Ordered Segment (mop=11) ************************ */
+/* ************************* Vector Store Indexed Ordered Normal & Segment (mop=0b11) ************************** */
 union clause ast = VSOXSEGTYPE : (bits(3), bits(1), regidx, regidx, vlewidth, regidx)
 
 mapping clause encdec = VSOXSEGTYPE(nf, vm, vs2, rs1, width, vs3) if haveRVV()
@@ -1205,15 +654,15 @@ function clause execute(VSOXSEGTYPE(nf, vm, vs2, rs1, width, vs3)) = {
   let num_elem = get_num_elem(EMUL_data_pow, EEW_data_bytes * 8); /* number of data and indices are the same */
   let nf_int = nfields_int(nf);
 
-  if illegal_segment_store(nf_int, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
+  if illegal_indexed_store(nf_int, EEW_index_bytes * 8, EMUL_index_pow, EMUL_data_pow) then { handle_illegal(); return RETIRE_FAIL };
 
   process_vsxseg(nf_int, vm, vs3, EEW_index_bytes, EEW_data_bytes, EMUL_index_pow, EMUL_data_pow, rs1, vs2, num_elem, 3)
 }
 
 mapping clause assembly = VSUXSEGTYPE(nf, vm, vs2, rs1, width, vs3)
-  <-> "vsoxseg" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
+  <-> "vsox" ^ nfields_string(nf) ^ "ei" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")" ^ sep() ^ reg_name(vs2) ^ maybe_vmask(vm)
 
-/* ************** Vector Load Unit-Stride Whole Register (vm=1, mop=0, lumop=01000) ************** */
+/* ***************** Vector Load Unit-Stride Whole Register (vm=0b1, mop=0b00, lumop=0b01000) ****************** */
 union clause ast = VLRETYPE : (bits(3), regidx, vlewidth, regidx)
 
 mapping clause encdec = VLRETYPE(nf, rs1, width, vd) if haveRVV()
@@ -1234,14 +683,14 @@ function process_vlre (nf, vd, load_width_bytes, rs1, elem_per_reg) = {
       let elem_offset = cur_elem * load_width_bytes;
       match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
         Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) => 
+        Ext_DataAddr_OK(vaddr) =>
           if check_misaligned(vaddr, width_type)
           then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
           else match translateAddr(vaddr, Read(Data)) {
             TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
             TR_Address(paddr, _) => {
               match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                MemValue(result) => write_single_element(load_width_bytes * 8, i, 0, vd + to_bits(5, cur_field), result),
+                MemValue(elem)   => write_single_element(load_width_bytes * 8, i, vd + to_bits(5, cur_field), elem),
                 MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
               }
             }
@@ -1258,14 +707,14 @@ function process_vlre (nf, vd, load_width_bytes, rs1, elem_per_reg) = {
       let elem_offset = cur_elem * load_width_bytes;
       match ext_data_get_addr(rs1, to_bits(sizeof(xlen), elem_offset), Read(Data), width_type) {
         Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-        Ext_DataAddr_OK(vaddr) => 
+        Ext_DataAddr_OK(vaddr) =>
           if check_misaligned(vaddr, width_type)
           then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
           else match translateAddr(vaddr, Read(Data)) {
             TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
             TR_Address(paddr, _) => {
               match mem_read(Read(Data), paddr, load_width_bytes, false, false, false) {
-                MemValue(result) => write_single_element(load_width_bytes * 8, i, 0, vd + to_bits(5, j) , result),
+                MemValue(elem)   => write_single_element(load_width_bytes * 8, i, vd + to_bits(5, j), elem),
                 MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
               }
             }
@@ -1275,7 +724,7 @@ function process_vlre (nf, vd, load_width_bytes, rs1, elem_per_reg) = {
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1295,7 +744,7 @@ function clause execute(VLRETYPE(nf, rs1, width, vd)) = {
 mapping clause assembly = VLRETYPE(nf, rs1, width, vd)
   <-> "vl" ^ nfields_string(nf) ^ "re" ^ vlewidth_bitsnumberstr(width) ^ ".v" ^ spc() ^ vreg_name(vd) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")"
 
-/* ************* Vector Store Unit-Stride Whole Register (vm=1, mop=0, lumop=01000) ************** */
+/* ***************** Vector Store Unit-Stride Whole Register (vm=0b1, mop=0b00, lumop=0b01000) ***************** */
 union clause ast = VSRETYPE : (bits(3), regidx, regidx)
 
 mapping clause encdec = VSRETYPE(nf, rs1, vs3) if haveRVV()
@@ -1326,8 +775,8 @@ function process_vsre (nf, load_width_bytes, rs1, vs3, elem_per_reg) = {
               match (eares) {
                 MemException(e) => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
                 MemValue(_) => {
-                  let elem_val : bits('b * 8) = read_single_element(load_width_bytes * 8, i, 0, vs3 + to_bits(5, cur_field));
-                  let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, elem_val, false, false, false);
+                  let elem : bits('b * 8) = read_single_element(load_width_bytes * 8, i, vs3 + to_bits(5, cur_field));
+                  let res : MemoryOpResult(bool) = mem_write_value(paddr, load_width_bytes, elem, false, false, false);
                   match (res) {
                     MemValue(true)  => (),
                     MemValue(false) => internal_error(__FILE__, __LINE__, "store got false from mem_write_value"),
@@ -1375,7 +824,7 @@ function process_vsre (nf, load_width_bytes, rs1, vs3, elem_per_reg) = {
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1395,7 +844,7 @@ function clause execute(VSRETYPE(nf, rs1, vs3)) = {
 mapping clause assembly = VSRETYPE(nf, rs1, vs3)
   <-> "vs" ^ nfields_string(nf) ^ "r.v" ^ spc() ^ vreg_name(vs3) ^ sep() ^ "(" ^ reg_name(rs1) ^ ")"
 
-/* *********** Vector Mask Load/Store Unit-Stride (nf=0, mop=0, lumop or sumop=01011) ************ */
+/* ************** Vector Mask Load/Store Unit-Stride (nf=0b000, mop=0b00, lumop or sumop=0b01011) ************** */
 union clause ast = VMTYPE : (regidx, regidx, vmlsop)
 
 mapping encdec_lsop : vmlsop <-> bits(7) = {
@@ -1418,14 +867,14 @@ function process_vm(vd_or_vs3, rs1, num_elem, evl, op) = {
       if op == VLM then { /* load */
         match ext_data_get_addr(rs1, to_bits(sizeof(xlen), i), Read(Data), width_type) {
           Ext_DataAddr_Error(e)  => { ext_handle_data_check_error(e); return RETIRE_FAIL },
-          Ext_DataAddr_OK(vaddr) => 
+          Ext_DataAddr_OK(vaddr) =>
             if check_misaligned(vaddr, width_type)
             then { handle_mem_exception(vaddr, E_Load_Addr_Align()); return RETIRE_FAIL }
             else match translateAddr(vaddr, Read(Data)) {
               TR_Failure(e, _)     => { handle_mem_exception(vaddr, e); return RETIRE_FAIL },
               TR_Address(paddr, _) => {
                 match mem_read(Read(Data), paddr, 1, false, false, false) {
-                  MemValue(result) => write_single_element(8, i, 0, vd_or_vs3, result),
+                  MemValue(elem)   => write_single_element(8, i, vd_or_vs3, elem),
                   MemException(e)  => { handle_mem_exception(vaddr, e); return RETIRE_FAIL }
                 }
               }
@@ -1458,13 +907,13 @@ function process_vm(vd_or_vs3, rs1, num_elem, evl, op) = {
       }
     } else { /* tail elements for mask load, always with agnostic policy */
       if op == VLM then {
-        write_single_element(8, i, 0, vd_or_vs3, vd_or_vs3_val[i]) 
+        write_single_element(8, i, vd_or_vs3, vd_or_vs3_val[i])
         /* TODO: configuration support for agnostic behavior */
       }
     }
   };
 
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 

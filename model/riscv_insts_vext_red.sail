@@ -74,25 +74,21 @@ function clause execute(RIVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
   let mask    : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
 
-  let scalar : bits('o) = read_single_element(SEW_widen, 0, 0, vs1); /* vs1 regardless of LMUL setting */
-  sum : bits('o) = match funct6 {
-    IVV_VWREDSUMU  => to_bits(SEW_widen, unsigned(scalar)),
-    IVV_VWREDSUM   => to_bits(SEW_widen, signed(scalar))
-  };
-
+  sum : bits('o) = read_single_element(SEW_widen, 0, vs1); /* vs1 regardless of LMUL setting */
   foreach (i from 0 to (num_elem_vs - 1)) {
     if mask[i] then {
-      sum = match funct6 {
-        IVV_VWREDSUMU  => to_bits(SEW_widen, unsigned(vs2_val[i]) + unsigned(sum)),
-        IVV_VWREDSUM   => to_bits(SEW_widen, signed(vs2_val[i]) + signed(sum))
-      }
+      let elem : bits('o) = match funct6 {
+        IVV_VWREDSUMU  => to_bits(SEW_widen, unsigned(vs2_val[i])),
+        IVV_VWREDSUM   => to_bits(SEW_widen, signed(vs2_val[i]))
+      };
+      sum = sum + elem
     }
   };
 
-  write_single_element(SEW_widen, 0, 0, vd, sum);
+  write_single_element(SEW_widen, 0, vd, sum);
   /* other elements in vd are treated as tail elements, currently remain unchanged */
   /* TODO: configuration support for agnostic behavior */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -135,12 +131,12 @@ function clause execute(RMVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let 'd = num_elem_vd;
   let 'm = SEW;
 
-  let vm_val   : vector('n, dec, bool)     = read_vmask(num_elem_vs, vm, 0b00000);
-  let vd_val   : vector('d, dec, bits('m)) = read_vreg(num_elem_vd, SEW, 0, vd);
-  let vs2_val  : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
-  let mask     : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
+  let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem_vs, vm, 0b00000);
+  let vd_val  : vector('d, dec, bits('m)) = read_vreg(num_elem_vd, SEW, 0, vd);
+  let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+  let mask    : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
 
-  sum : bits('m) = read_single_element(SEW, 0, 0, vs1); /* vs1 regardless of LMUL setting */
+  sum : bits('m) = read_single_element(SEW, 0, vs1); /* vs1 regardless of LMUL setting */
   foreach (i from 0 to (num_elem_vs - 1)) {
     if mask[i] then {
       sum = match funct6 {
@@ -156,10 +152,10 @@ function clause execute(RMVVTYPE(funct6, vm, vs2, vs1, vd)) = {
     }
   };
 
-  write_single_element(SEW, 0, 0, vd, sum);
+  write_single_element(SEW, 0, vd, sum);
   /* other elements in vd are treated as tail elements, currently remain unchanged */
   /* TODO: configuration support for agnostic behavior */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -175,7 +171,7 @@ mapping rmvvtype_mnemonic : rmvvfunct6 <-> string = {
 }
 
 mapping clause assembly = RMVVTYPE(funct6, vm, vs2, vs1, vd)
-  <-> rmvvtype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)  
+  <-> rmvvtype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)
 
 /* ********************** OPFVV (Floating-Point Reduction) *********************** */
 union clause ast = RFVVTYPE : (rfvvfunct6, bits(1), regidx, regidx, regidx)
@@ -211,7 +207,7 @@ function process_rfvv_single(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_po
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
   let mask    : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
 
-  sum : bits('m) = read_single_element(SEW, 0, 0, vs1); /* vs1 regardless of LMUL setting */
+  sum : bits('m) = read_single_element(SEW, 0, vs1); /* vs1 regardless of LMUL setting */
   foreach (i from 0 to (num_elem_vs - 1)) {
     if mask[i] then {
       sum = match funct6 {
@@ -224,10 +220,10 @@ function process_rfvv_single(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_po
     }
   };
 
-  write_single_element(SEW, 0, 0, vd, sum);
+  write_single_element(SEW, 0, vd, sum);
   /* other elements in vd are treated as tail elements, currently remain unchanged */
   /* TODO: configuration support for agnostic behavior */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -248,12 +244,12 @@ function process_rfvv_widen(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_pow
   let 'm = SEW;
   let 'o = SEW_widen;
 
-  let vm_val   : vector('n, dec, bool)     = read_vmask(num_elem_vs, vm, 0b00000);
-  let vd_val   : vector('d, dec, bits('o)) = read_vreg(num_elem_vd, SEW_widen, 0, vd);
-  let vs2_val  : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
-  let mask     : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
+  let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem_vs, vm, 0b00000);
+  let vd_val  : vector('d, dec, bits('o)) = read_vreg(num_elem_vd, SEW_widen, 0, vd);
+  let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+  let mask    : vector('n, dec, bool)     = init_masked_source(num_elem_vs, LMUL_pow, vm_val);
 
-  sum : bits('o) = read_single_element(SEW_widen, 0, 0, vs1); /* vs1 regardless of LMUL setting */
+  sum : bits('o) = read_single_element(SEW_widen, 0, vs1); /* vs1 regardless of LMUL setting */
   foreach (i from 0 to (num_elem_vs - 1)) {
     if mask[i] then {
       /* currently ordered/unordered sum reductions do the same operations */
@@ -261,10 +257,10 @@ function process_rfvv_widen(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_pow
     }
   };
 
-  write_single_element(SEW_widen, 0, 0, vd, sum);
+  write_single_element(SEW_widen, 0, vd, sum);
   /* other elements in vd are treated as tail elements, currently remain unchanged */
   /* TODO: configuration support for agnostic behavior */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -273,7 +269,7 @@ function clause execute(RFVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem_vs = get_num_elem(LMUL_pow, SEW);
 
-  if funct6 == FVV_VFWREDOSUM | funct6 == FVV_VFWREDUSUM then 
+  if funct6 == FVV_VFWREDOSUM | funct6 == FVV_VFWREDUSUM then
     process_rfvv_widen(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_pow)
   else
     process_rfvv_single(funct6, vm, vs2, vs1, vd, num_elem_vs, SEW, LMUL_pow)

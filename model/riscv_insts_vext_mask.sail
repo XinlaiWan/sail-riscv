@@ -78,22 +78,21 @@ function clause execute(MMTYPE(funct6, vs2, vs1, vd)) = {
 
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] then {
-      let res : bool = match funct6 {
+      result[i] = match funct6 {
         MM_VMAND     => vs2_val[i] & vs1_val[i],
         MM_VMNAND    => not(vs2_val[i] & vs1_val[i]),
         MM_VMANDNOT  => vs2_val[i] & not(vs1_val[i]),
-        MM_VMXOR     => vs2_val[i] ^ vs1_val[i],
+        MM_VMXOR     => vs2_val[i] != vs1_val[i],
         MM_VMOR      => vs2_val[i] | vs1_val[i],
         MM_VMNOR     => not(vs2_val[i] | vs1_val[i]),
         MM_VMORNOT   => vs2_val[i] | not(vs1_val[i]),
-        MM_VMXNOR    => not(vs2_val[i] ^ vs1_val[i])
-      };
-      result[i] = res;
+        MM_VMXNOR    => vs2_val[i] == vs1_val[i]
+      }
     }
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -140,7 +139,7 @@ function clause execute(VCPOP_M(vm, vs2, rd)) = {
   };
 
   X(rd) = to_bits(sizeof(xlen), count);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -178,7 +177,7 @@ function clause execute(VFIRST_M(vm, vs2, rd)) = {
   };
 
   X(rd) = to_bits(sizeof(xlen), index);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -219,7 +218,7 @@ function clause execute(VMSBF_M(vm, vs2, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -260,7 +259,7 @@ function clause execute(VMSIF_M(vm, vs2, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -305,7 +304,7 @@ function clause execute(VMSOF_M(vm, vs2, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -346,7 +345,7 @@ function clause execute(VIOTA_M(vm, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -381,7 +380,7 @@ function clause execute(VID_V(vm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 

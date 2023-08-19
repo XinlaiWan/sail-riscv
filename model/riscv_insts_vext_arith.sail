@@ -61,7 +61,7 @@ mapping encdec_vvfunct6 : vvfunct6 <-> bits(6) = {
   VV_VSADDU        <-> 0b100000,
   VV_VSADD         <-> 0b100001,
   VV_VSSUBU        <-> 0b100010,
-  VV_VSSUB         <-> 0b100011,  
+  VV_VSSUB         <-> 0b100011,
   VV_VSLL          <-> 0b100101,
   VV_VSMUL         <-> 0b100111,
   VV_VSRL          <-> 0b101000,
@@ -148,7 +148,7 @@ function clause execute(VVTYPE(funct6, vm, vs2, vs1, vd)) = {
                               let idx = unsigned(vs1_val[i]);
                               let VLMAX = int_power(2, LMUL_pow + VLEN_pow - SEW_pow);
                               assert(VLMAX <= 'n);
-                              if idx < VLMAX then vs2_val[idx] else zeros() 
+                              if idx < VLMAX then vs2_val[idx] else zeros()
                             },
         VV_VRGATHEREI16  => {
                               if (vs1 == vd | vs2 == vd) then { handle_illegal(); return RETIRE_FAIL };
@@ -157,14 +157,14 @@ function clause execute(VVTYPE(funct6, vm, vs2, vs1, vd)) = {
                               let idx = unsigned(vs1_new[i]);
                               let VLMAX = int_power(2, LMUL_pow + VLEN_pow - SEW_pow);
                               assert(VLMAX <= 'n);
-                              if idx < VLMAX then vs2_val[idx] else zeros()                   
+                              if idx < VLMAX then vs2_val[idx] else zeros()
                             }
       }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -250,7 +250,7 @@ function clause execute(NVSTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -318,7 +318,7 @@ function clause execute(NVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -360,10 +360,9 @@ function clause execute(MASKTYPEV(vs2, vs1, vd)) = {
     if i < start_element then {
       result[i] = vd_val[i]
     } else if i > end_element | i >= real_num_elem then {
-      if tail_ag == UNDISTURBED then {
-        result[i] = vd_val[i]
-      } else if tail_ag == AGNOSTIC then {
-        result[i] = vd_val[i] /* TODO: configuration support */
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] /* TODO: configuration support */
       }
     } else {
       /* the merge operates on all body elements */
@@ -372,7 +371,7 @@ function clause execute(MASKTYPEV(vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -408,7 +407,7 @@ function clause execute(MOVETYPEV(vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -518,7 +517,7 @@ function clause execute(VXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -568,7 +567,7 @@ function clause execute(NXSTYPE(funct6, vm, vs2, rs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow)) 
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -603,7 +602,7 @@ function clause execute(NXSTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -635,7 +634,7 @@ function clause execute(NXTYPE(funct6, vm, vs2, rs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow)) 
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -657,11 +656,11 @@ function clause execute(NXTYPE(funct6, vm, vs2, rs1, vd)) = {
       let shift_amount = get_shift_amount(rs1_val, SEW_widen);
       let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
       result[i] = match funct6 {
-        NX_VNCLIPU => {                    
+        NX_VNCLIPU => {
                         let result_wide = (vs2_val[i] >> shift_amount) + EXTZ('o, rounding_incr);
                         unsigned_saturation('m, result_wide)
                       },
-        NX_VNCLIP  => {       
+        NX_VNCLIP  => {
                         let v_double : bits('m * 4) = EXTS(vs2_val[i]);
                         let result_wide = slice(v_double >> shift_amount, 0, 'o) + EXTZ('o, rounding_incr);
                         signed_saturation('m, result_wide)
@@ -671,7 +670,7 @@ function clause execute(NXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -733,16 +732,16 @@ function clause execute(VXSG(funct6, vm, vs2, rs1, vd)) = {
                             if (vs2 == vd) then { handle_illegal(); return RETIRE_FAIL };
                             let VLMAX = int_power(2, LMUL_pow + VLEN_pow - SEW_pow);
                             assert(VLMAX > 0 & VLMAX <= 'n);
-                            if rs1_val < VLMAX then vs2_val[rs1_val] else zeros() 
+                            if rs1_val < VLMAX then vs2_val[rs1_val] else zeros()
                           }
       }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
-} 
+}
 
 mapping vxsg_mnemonic : vxsgfunct6 <-> string = {
   VX_VSLIDEUP     <-> "vslideup.vx",
@@ -783,10 +782,9 @@ function clause execute(MASKTYPEX(vs2, rs1, vd)) = {
     if i < start_element then {
       result[i] = vd_val[i]
     } else if i > end_element | i >= real_num_elem then {
-      if tail_ag == UNDISTURBED then {
-        result[i] = vd_val[i]
-      } else if tail_ag == AGNOSTIC then {
-        result[i] = vd_val[i] /* TODO: configuration support */
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] /* TODO: configuration support */
       }
     } else {
       /* the merge operates on all body elements */
@@ -795,12 +793,12 @@ function clause execute(MASKTYPEX(vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
 mapping clause assembly = MASKTYPEX(vs2, rs1, vd)
-  <-> "vmerge.vxm" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1) ^ sep() ^ "v0" 
+  <-> "vmerge.vxm" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1) ^ sep() ^ "v0"
 
 /* ********************** OPIVX (Integer Move Instruction) *********************** */
 union clause ast = MOVETYPEX : (regidx, regidx)
@@ -831,7 +829,7 @@ function clause execute(MOVETYPEX(rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -917,7 +915,7 @@ function clause execute(VITYPE(funct6, vm, vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -994,7 +992,7 @@ function clause execute(NISTYPE(funct6, vm, vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1004,7 +1002,7 @@ mapping nistype_mnemonic : nisfunct6 <-> string = {
 }
 
 mapping clause assembly = NISTYPE(funct6, vm, vs2, simm, vd)
-  <-> nistype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(simm) ^ maybe_vmask(vm) 
+  <-> nistype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(simm) ^ maybe_vmask(vm)
 
 /* ************************** OPIVI (WITYPE Narrowing) *************************** */
 /* *************** Vector Narrowing Fixed-Point Clip Instructions **************** */
@@ -1048,11 +1046,11 @@ function clause execute(NITYPE(funct6, vm, vs2, simm, vd)) = {
       let shift_amount = get_shift_amount(imm_val, SEW_widen);
       let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
       result[i] = match funct6 {
-        NI_VNCLIPU => {                    
+        NI_VNCLIPU => {
                         let result_wide = (vs2_val[i] >> shift_amount) + EXTZ('o, rounding_incr);
                         unsigned_saturation('m, result_wide)
                       },
-        NI_VNCLIP  => {        
+        NI_VNCLIP  => {
                         let v_double : bits('m * 4) = EXTS(vs2_val[i]);
                         let result_wide = slice(v_double >> shift_amount, 0, 'o) + EXTZ('o, rounding_incr);
                         signed_saturation('m, result_wide)
@@ -1062,7 +1060,7 @@ function clause execute(NITYPE(funct6, vm, vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1124,16 +1122,16 @@ function clause execute(VISG(funct6, vm, vs2, simm, vd)) = {
                             if (vs2 == vd) then { handle_illegal(); return RETIRE_FAIL };
                             let VLMAX = int_power(2, LMUL_pow + VLEN_pow - SEW_pow);
                             assert(VLMAX > 0 & VLMAX <= 'n);
-                            if imm_val < VLMAX then vs2_val[imm_val] else zeros() 
+                            if imm_val < VLMAX then vs2_val[imm_val] else zeros()
                           }
       }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
-} 
+}
 
 mapping visg_mnemonic : visgfunct6 <-> string = {
   VI_VSLIDEUP     <-> "vslideup.vi",
@@ -1174,10 +1172,9 @@ function clause execute(MASKTYPEI(vs2, simm, vd)) = {
     if i < start_element then {
       result[i] = vd_val[i]
     } else if i > end_element | i >= real_num_elem then {
-      if tail_ag == UNDISTURBED then {
-        result[i] = vd_val[i]
-      } else if tail_ag == AGNOSTIC then {
-        result[i] = vd_val[i] /* TODO: configuration support */
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] /* TODO: configuration support */
       }
     } else {
       /* the merge operates on all body elements */
@@ -1186,7 +1183,7 @@ function clause execute(MASKTYPEI(vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1222,7 +1219,7 @@ function clause execute(MOVETYPEI(vd, simm)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1258,9 +1255,9 @@ function clause execute(VMVRTYPE(vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, EMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
-} 
+}
 
 mapping simm_string : bits(5) <-> string = {
   0b00000 <-> "1",
@@ -1313,12 +1310,12 @@ function clause execute(MVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   (result, mask) = init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val);
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] then{
+    if mask[i] then {
       result[i] = match funct6 {
         MVV_VAADDU   => {
                           let result_add = EXTZ('m + 1, vs2_val[i]) + EXTZ('m + 1, vs1_val[i]);
                           let rounding_incr = get_fixed_rounding_incr(result_add, 1);
-                          slice(result_add >> 1, 0, 'm) + EXTZ('m, rounding_incr)                              
+                          slice(result_add >> 1, 0, 'm) + EXTZ('m, rounding_incr)
                         },
         MVV_VAADD    => {
                           let result_add = EXTS('m + 1, vs2_val[i]) + EXTS('m + 1, vs1_val[i]);
@@ -1328,7 +1325,7 @@ function clause execute(MVVTYPE(funct6, vm, vs2, vs1, vd)) = {
         MVV_VASUBU   => {
                           let result_sub = EXTZ('m + 1, vs2_val[i]) - EXTZ('m + 1, vs1_val[i]);
                           let rounding_incr = get_fixed_rounding_incr(result_sub, 1);
-                          slice(result_sub >> 1, 0, 'm) + EXTZ('m, rounding_incr)                             
+                          slice(result_sub >> 1, 0, 'm) + EXTZ('m, rounding_incr)
                         },
         MVV_VASUB    => {
                           let result_sub = EXTS('m + 1, vs2_val[i]) - EXTS('m + 1, vs1_val[i]);
@@ -1337,7 +1334,7 @@ function clause execute(MVVTYPE(funct6, vm, vs2, vs1, vd)) = {
                         },
         MVV_VMUL     => get_slice_int(SEW, signed(vs2_val[i]) * signed(vs1_val[i]), 0),
         MVV_VMULH    => get_slice_int(SEW, signed(vs2_val[i]) * signed(vs1_val[i]), SEW),
-        MVV_VMULHU   => get_slice_int(SEW, unsigned(vs2_val[i]) * unsigned(vs1_val[i]), SEW),  
+        MVV_VMULHU   => get_slice_int(SEW, unsigned(vs2_val[i]) * unsigned(vs1_val[i]), SEW),
         MVV_VMULHSU  => get_slice_int(SEW, signed(vs2_val[i]) * unsigned(vs1_val[i]), SEW),
         MVV_VDIVU    => {
                           let q : int = if unsigned(vs1_val[i]) == 0 then -1 else quot_round_zero(unsigned(vs2_val[i]), unsigned(vs1_val[i]));
@@ -1366,7 +1363,7 @@ function clause execute(MVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1421,8 +1418,8 @@ function clause execute(MVVMATYPE(funct6, vm, vs2, vs1, vd)) = {
 
   (result, mask) = init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val);
 
-  foreach (i from 0 to (num_elem - 1)){
-    if mask[i] then{
+  foreach (i from 0 to (num_elem - 1)) {
+    if mask[i] then {
       result[i] = match funct6 {
         MVV_VMACC  => get_slice_int(SEW, signed(vs1_val[i]) * signed(vs2_val[i]), 0) + vd_val[i],
         MVV_VNMSAC => vd_val[i] - get_slice_int(SEW, signed(vs1_val[i]) * signed(vs2_val[i]), 0),
@@ -1433,7 +1430,7 @@ function clause execute(MVVMATYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1471,7 +1468,7 @@ function clause execute(WVVTYPE(funct6, vm, vs2, vs1, vd)) = {
 
   if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
-      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen)) 
+      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -1502,7 +1499,7 @@ function clause execute(WVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1540,7 +1537,7 @@ function clause execute(WVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) 
+      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -1568,7 +1565,7 @@ function clause execute(WVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1603,8 +1600,8 @@ function clause execute(WMVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) | 
-      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen)) 
+      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -1624,14 +1621,14 @@ function clause execute(WMVVTYPE(funct6, vm, vs2, vs1, vd)) = {
     if mask[i] then {
       result[i] = match funct6 {
         WMVV_VWMACC   => to_bits(SEW_widen, signed(vs1_val[i]) * signed(vs2_val[i])) + vd_val[i],
-        WMVV_VWMACCU  => to_bits(SEW_widen, unsigned(vs1_val[i]) * unsigned(vs2_val[i])) + vd_val[i], 
+        WMVV_VWMACCU  => to_bits(SEW_widen, unsigned(vs1_val[i]) * unsigned(vs2_val[i])) + vd_val[i],
         WMVV_VWMACCSU => to_bits(SEW_widen, signed(vs1_val[i]) * unsigned(vs2_val[i]))+ vd_val[i]
       }
     }
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1664,7 +1661,7 @@ function clause execute(VEXT2TYPE(funct6, vm, vs2, vd)) = {
   let LMUL_pow_half = LMUL_pow - 1;
 
   if  illegal_variable_width(vd, vm, SEW_half, LMUL_pow_half) |
-      not(valid_reg_overlap(vs2, vd, LMUL_pow_half, LMUL_pow)) 
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_half, LMUL_pow))
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -1690,7 +1687,7 @@ function clause execute(VEXT2TYPE(funct6, vm, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1748,7 +1745,7 @@ function clause execute(VEXT4TYPE(funct6, vm, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1806,7 +1803,7 @@ function clause execute(VEXT8TYPE(funct6, vm, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1838,7 +1835,7 @@ function clause execute(VMVXS(vs2, rd)) = {
   X(rd) = if sizeof(xlen) < SEW then slice(vs2_val[0], 0, sizeof(xlen))
           else if sizeof(xlen) > SEW then EXTS(vs2_val[0])
           else vs2_val[0];
-  vstart = EXTZ(0b0);
+  vstart = zeros();
 
   RETIRE_SUCCESS
 }
@@ -1887,15 +1884,16 @@ function clause execute(MVVCOMPRESS(vs2, vs1, vd)) = {
   if vd_idx < num_elem then {
     let tail_ag : agtype = get_vtype_vta();
     let 'p = vd_idx;
-    if tail_ag == UNDISTURBED then {
-      foreach (i from 'p to (num_elem - 1)) result[i] = vd_val[i]
-    } else if tail_ag == AGNOSTIC then { /* TODO: configuration support */
-      foreach (i from 'p to (num_elem - 1)) result[i] = vd_val[i]
+    foreach (i from 'p to (num_elem - 1)) {
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] /* TODO: configuration support */
+      }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1923,7 +1921,7 @@ mapping encdec_mvxfunct6 : mvxfunct6 <-> bits(6) = {
 }
 
 mapping clause encdec = MVXTYPE(funct6, vm, vs2, rs1, vd) if haveRVV()
-  <-> encdec_mvxfunct6(funct6) @ vm @ vs2 @ rs1 @ 0b110 @ vd @ 0b1010111 if haveRVV() 
+  <-> encdec_mvxfunct6(funct6) @ vm @ vs2 @ rs1 @ 0b110 @ vd @ 0b1010111 if haveRVV()
 
 function clause execute(MVXTYPE(funct6, vm, vs2, rs1, vd)) = {
   let SEW      = get_sew();
@@ -1950,7 +1948,7 @@ function clause execute(MVXTYPE(funct6, vm, vs2, rs1, vd)) = {
         MVX_VAADDU       => {
                               let result_add = EXTZ('m + 1, vs2_val[i]) + EXTZ('m + 1, rs1_val);
                               let rounding_incr = get_fixed_rounding_incr(result_add, 1);
-                              slice(result_add >> 1, 0, 'm) + EXTZ('m, rounding_incr)                              
+                              slice(result_add >> 1, 0, 'm) + EXTZ('m, rounding_incr)
                             },
         MVX_VAADD        => {
                               let result_add = EXTS('m + 1, vs2_val[i]) + EXTS('m + 1, rs1_val);
@@ -1960,7 +1958,7 @@ function clause execute(MVXTYPE(funct6, vm, vs2, rs1, vd)) = {
         MVX_VASUBU       => {
                               let result_sub = EXTZ('m + 1, vs2_val[i]) - EXTZ('m + 1, rs1_val);
                               let rounding_incr = get_fixed_rounding_incr(result_sub, 1);
-                              slice(result_sub >> 1, 0, 'm) + EXTZ('m, rounding_incr)                               
+                              slice(result_sub >> 1, 0, 'm) + EXTZ('m, rounding_incr)
                             },
         MVX_VASUB        => {
                               let result_sub = EXTS('m + 1, vs2_val[i]) - EXTS('m + 1, rs1_val);
@@ -2007,7 +2005,7 @@ function clause execute(MVXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -2029,7 +2027,7 @@ mapping mvxtype_mnemonic : mvxfunct6 <-> string = {
 }
 
 mapping clause assembly = MVXTYPE(funct6, vm, vs2, rs1, vd)
-  <-> mvxtype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1) ^ maybe_vmask(vm) 
+  <-> mvxtype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1) ^ maybe_vmask(vm)
 
 /* ************************* OPMVX (VXtype Multiply-Add) ************************* */
 /* Multiply-Add instructions switch the order of source operands in assembly (vs1/rs1 before vs2) */
@@ -2043,7 +2041,7 @@ mapping encdec_mvxmafunct6 : mvxmafunct6 <-> bits(6) = {
 }
 
 mapping clause encdec = MVXMATYPE(funct6, vm, vs2, rs1, vd) if haveRVV()
-  <-> encdec_mvxmafunct6(funct6) @ vm @ vs2 @ rs1 @ 0b110 @ vd @ 0b1010111 if haveRVV() 
+  <-> encdec_mvxmafunct6(funct6) @ vm @ vs2 @ rs1 @ 0b110 @ vd @ 0b1010111 if haveRVV()
 
 function clause execute(MVXMATYPE(funct6, vm, vs2, rs1, vd)) = {
   let SEW      = get_sew();
@@ -2064,8 +2062,8 @@ function clause execute(MVXMATYPE(funct6, vm, vs2, rs1, vd)) = {
 
   (result, mask) = init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val);
 
-  foreach (i from 0 to (num_elem - 1)){
-    if mask[i] then{
+  foreach (i from 0 to (num_elem - 1)) {
+    if mask[i] then {
       result[i] = match funct6 {
         MVX_VMACC  => get_slice_int(SEW, signed(rs1_val) * signed(vs2_val[i]), 0) + vd_val[i],
         MVX_VNMSAC => vd_val[i] - get_slice_int(SEW, signed(rs1_val) * signed(vs2_val[i]), 0),
@@ -2076,7 +2074,7 @@ function clause execute(MVXMATYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -2145,7 +2143,7 @@ function clause execute(WVXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -2182,7 +2180,7 @@ function clause execute(WXTYPE(funct6, vm, vs2, rs1, vd)) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) 
+  if illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen)
   then { handle_illegal(); return RETIRE_FAIL };
 
   let 'n = num_elem;
@@ -2210,7 +2208,7 @@ function clause execute(WXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -2274,7 +2272,7 @@ function clause execute(WMVXTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -2317,14 +2315,15 @@ function clause execute(VMVSX(rs1, vd)) = {
 
   /* others treated as tail elements */
   let tail_ag : agtype = get_vtype_vta();
-  if tail_ag == UNDISTURBED then {
-    foreach (i from 1 to (num_elem - 1)) result[i] = vd_val[i]
-  } else if tail_ag == AGNOSTIC then {
-    foreach (i from 1 to (num_elem - 1)) result[i] = vd_val[i] /* TODO: configuration support */
+  foreach (i from 1 to (num_elem - 1)) {
+    result[i] = match tail_ag {
+      UNDISTURBED => vd_val[i],
+      AGNOSTIC    => vd_val[i] /* TODO: configuration support */
+    }
   };
 
   write_vreg(num_elem, SEW, 0, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 

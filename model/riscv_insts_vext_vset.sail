@@ -79,14 +79,14 @@ mapping encdec_vsetop : vsetop <-> bits(4) ={
   VSETVL  <-> 0b1000
 }
 
-mapping clause encdec = VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) if haveRVV() 
+mapping clause encdec = VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) if haveRVV()
   <-> encdec_vsetop(op) @ ma @ ta @ sew @ lmul @ rs1 @ 0b111 @ rd @ 0b1010111 if haveRVV()
 
 function clause execute VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) = {
   let VLEN_pow      = get_vlen_pow();
   let ELEN_pow      = get_elen_pow();
   let LMUL_pow_ori  = get_lmul_pow();
-  let SEW_pow_ori   = get_sew_pow(); 
+  let SEW_pow_ori   = get_sew_pow();
   let ratio_pow_ori = SEW_pow_ori - LMUL_pow_ori;
 
   /* set vtype */
@@ -127,7 +127,7 @@ function clause execute VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) = {
   } else { /* keep existing vl */
     let AVL = unsigned(vl);
     let ratio_pow_new = SEW_pow_new - LMUL_pow_new;
-    if (ratio_pow_new != ratio_pow_ori) then { 
+    if (ratio_pow_new != ratio_pow_ori) then {
       vtype->bits() = 0b1 @ zeros(sizeof(xlen) - 1); /* set vtype.vill */
       vl = EXTZ(0b0);
     }
@@ -136,7 +136,7 @@ function clause execute VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) = {
   print_reg("CSR vl <- " ^ BitStr(vl));
 
   /* reset vstart to 0 */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   print_reg("CSR vstart <- " ^ BitStr(vstart));
 
   RETIRE_SUCCESS
@@ -147,20 +147,20 @@ mapping vsettype_mnemonic : vsetop <-> string ={
   VSETVL  <-> "vsetvli"
 }
 
-mapping clause assembly = VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd) 
+mapping clause assembly = VSET_TYPE(op, ma, ta, sew, lmul, rs1, rd)
   <-> vsettype_mnemonic(op) ^ spc() ^ reg_name(rd) ^ sep() ^ reg_name(rs1) ^ sep() ^ sew_flag(sew) ^ maybe_lmul_flag(lmul) ^ maybe_ta_flag(ta) ^ maybe_ma_flag(ma)
 
 /* ********************************* vsetivli ************************************ */
 union clause ast = VSETI_TYPE : ( bits(1), bits(1), bits(3), bits(3), regidx, regidx)
 
-mapping clause encdec = VSETI_TYPE(ma, ta, sew, lmul, uimm, rd) if haveRVV() 
+mapping clause encdec = VSETI_TYPE(ma, ta, sew, lmul, uimm, rd) if haveRVV()
   <-> 0b1100 @ ma @ ta @ sew @ lmul @ uimm @ 0b111 @ rd @ 0b1010111 if haveRVV()
 
 function clause execute VSETI_TYPE(ma, ta, sew, lmul, uimm, rd) = {
   let VLEN_pow      = get_vlen_pow();
   let ELEN_pow      = get_elen_pow();
   let LMUL_pow_ori  = get_lmul_pow();
-  let SEW_pow_ori   = get_sew_pow(); 
+  let SEW_pow_ori   = get_sew_pow();
   let ratio_pow_ori = SEW_pow_ori - LMUL_pow_ori;
 
   /* set vtype */
@@ -188,11 +188,11 @@ function clause execute VSETI_TYPE(ma, ta, sew, lmul, uimm, rd) = {
   print_reg("CSR vl <- " ^ BitStr(vl));
 
   /* reset vstart to 0 */
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   print_reg("CSR vstart <- " ^ BitStr(vstart));
 
   RETIRE_SUCCESS
 }
 
-mapping clause assembly = VSETI_TYPE(ma, ta, sew, lmul, uimm, rd) 
+mapping clause assembly = VSETI_TYPE(ma, ta, sew, lmul, uimm, rd)
   <-> "vsetivli" ^ spc() ^ reg_name(rd) ^ sep() ^ hex_bits_5(uimm) ^ sep() ^ sew_flag(sew) ^ maybe_lmul_flag(lmul) ^ maybe_ta_flag(ta) ^ maybe_ma_flag(ma)

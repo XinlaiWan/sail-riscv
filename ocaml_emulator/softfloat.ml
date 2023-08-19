@@ -53,45 +53,6 @@ let f32_sqrt rm v =
 let f64_sqrt rm v =
   ()
 
-let f16_rsqrte7 rm v =
-  ()
-
-let f32_rsqrte7 rm v =
-  ()
-
-let f64_rsqrte7 rm v =
-  ()
-
-let f16_recip7 rm v =
-  ()
-
-let f32_recip7 rm v =
-  ()
-
-let f64_recip7 rm v =
-  ()
-
-let f16_class v =
-  ()
-
-let f32_class v =
-  ()
-
-let f64_class v =
-  ()
-
-let f16_to_i8 rm v =
-  ()
-
-let f16_to_ui8 rm v =
-  ()
-
-let f16_to_i16 rm v =
-  ()
-
-let f16_to_ui16 rm v =
-  ()
-
 let f16_to_i32 rm v =
   ()
 
@@ -114,12 +75,6 @@ let i64_to_f16 rm v =
   ()
 
 let ui64_to_f16 rm v =
-  ()
-
-let f32_to_i16 rm v =
-  ()
-
-let f32_to_ui16 rm v =
   ()
 
 let f32_to_i32 rm v =

@@ -140,17 +140,7 @@ val xor_vec = {c: "xor_bits", _: "xor_vec"} : forall 'n. (bits('n), bits('n)) ->
 
 val int_power = {ocaml: "int_power", interpreter: "int_power", lem: "pow", coq: "pow", c: "pow_int"} : (int, int) -> int
 
-val xor_bool : (bool, bool) -> bool
-function xor_bool(b1, b2) = {
-  match (b1, b2) {
-    (false, false) => false,
-    (false, true)  => true,
-    (true, false)  => true,
-    (true, true)   => false
-  }
-}
-
-overload operator ^ = {xor_vec, int_power, concat_str, xor_bool}
+overload operator ^ = {xor_vec, int_power, concat_str}
 
 val sub_vec = {c: "sub_bits", _: "sub_vec"} : forall 'n. (bits('n), bits('n)) -> bits('n)
 
@@ -208,19 +198,16 @@ overload zeros = {zeros_implicit}
 val ones : forall 'n, 'n >= 0 . implicit('n) -> bits('n)
 function ones (n) = sail_ones (n)
 
+val bool_to_bit : bool -> bit
+function bool_to_bit x = if x then bitone else bitzero
+
 val bool_to_bits : bool -> bits(1)
-function bool_to_bits x = if x then 0b1 else 0b0
+function bool_to_bits x = [bool_to_bit(x)]
 
 val bit_to_bool : bit -> bool
 function bit_to_bool b = match b {
   bitone  => true,
   bitzero => false
-}
-
-val bool_to_bit : bool -> bit
-function bool_to_bit b = match b {
-  true  => bitone,
-  false => bitzero
 }
 
 val to_bits : forall 'l, 'l >= 0.(atom('l), int) -> bits('l)
@@ -349,7 +336,7 @@ val "print_int" : (string, int) -> unit
 overload operator / = {quot_round_zero}
 overload operator * = {mult_atom, mult_int}
 
-/* helper for vector extension 
+/* helper for vector extension
  * 1. EEW between 8 and 64
  * 2. EMUL in vmv<nr>r.v instructions between 1 and 8
  */

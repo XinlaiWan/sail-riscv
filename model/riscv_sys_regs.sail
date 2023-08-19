@@ -897,18 +897,16 @@ function get_lmul_pow() = {
 
 enum agtype = { UNDISTURBED, AGNOSTIC }
 
-val get_vtype_vma : unit -> agtype effect {rreg}
-function get_vtype_vma() = {
-  match vtype.vma() {
+val decode_agtype : bits(1) -> agtype
+function decode_agtype(ag) = {
+  match ag {
     0b0 => UNDISTURBED,
     0b1 => AGNOSTIC
   }
 }
 
+val get_vtype_vma : unit -> agtype effect {rreg}
+function get_vtype_vma() = decode_agtype(vtype.vma())
+
 val get_vtype_vta : unit -> agtype effect {rreg}
-function get_vtype_vta() = {
-  match vtype.vta() {
-    0b0 => UNDISTURBED,
-    0b1 => AGNOSTIC
-  }
-}
+function get_vtype_vta() = decode_agtype(vtype.vta())

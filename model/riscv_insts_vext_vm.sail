@@ -85,7 +85,7 @@ function clause execute(VVMTYPE(funct6, vs2, vs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -140,7 +140,7 @@ function clause execute(VVMCTYPE(funct6, vs2, vs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -201,7 +201,7 @@ function clause execute(VVMSTYPE(funct6, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -263,7 +263,7 @@ function clause execute(VVCMPTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -323,7 +323,7 @@ function clause execute(VXMTYPE(funct6, vs2, rs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -378,7 +378,7 @@ function clause execute(VXMCTYPE(funct6, vs2, rs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -439,7 +439,7 @@ function clause execute(VXMSTYPE(funct6, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -505,7 +505,7 @@ function clause execute(VXCMPTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -565,7 +565,7 @@ function clause execute(VIMTYPE(funct6, vs2, simm, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -617,7 +617,7 @@ function clause execute(VIMCTYPE(funct6, vs2, simm, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -675,7 +675,7 @@ function clause execute(VIMSTYPE(funct6, vs2, simm, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -736,7 +736,7 @@ function clause execute(VICMPTYPE(funct6, vm, vs2, simm, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -781,7 +781,7 @@ function clause execute(FVVMTYPE(funct6, vm, vs2, vs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let vs1_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bool)     = read_vmask(num_elem, 0b0, vd);  
+  let vd_val  : vector('n, dec, bool)     = read_vmask(num_elem, 0b0, vd);
   result      : vector('n, dec, bool)     = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -800,7 +800,7 @@ function clause execute(FVVMTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -845,7 +845,7 @@ function clause execute(FVFMTYPE(funct6, vm, vs2, rs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let rs1_val : bits('m)                  = get_scalar_fp(rs1, 'm);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bool)     = read_vmask(num_elem, 0b0, vd);    
+  let vd_val  : vector('n, dec, bool)     = read_vmask(num_elem, 0b0, vd);
   result      : vector('n, dec, bool)     = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -866,7 +866,7 @@ function clause execute(FVFMTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vmask(num_elem, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 

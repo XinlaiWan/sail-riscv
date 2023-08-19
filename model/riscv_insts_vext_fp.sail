@@ -75,7 +75,7 @@ function clause execute(FVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let vs1_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);    
+  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
   result      : vector('n, dec, bits('m)) = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -98,7 +98,7 @@ function clause execute(FVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -150,7 +150,7 @@ function clause execute(FVVMATYPE(funct6, vm, vs2, vs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let vs1_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);    
+  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
   result      : vector('n, dec, bits('m)) = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -167,12 +167,12 @@ function clause execute(FVVMATYPE(funct6, vm, vs2, vs1, vd)) = {
         FVV_VNMADD   => fp_nmulsub(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
         FVV_VMSUB    => fp_mulsub(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
         FVV_VNMSUB   => fp_nmuladd(rm_3b, vs1_val[i], vd_val[i], vs2_val[i])
-      } 
+      }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -211,8 +211,8 @@ function clause execute(FWVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) | 
-      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen)) 
+      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
   assert(SEW >= 16 & SEW_widen <= 64);
 
@@ -240,7 +240,7 @@ function clause execute(FWVVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -276,7 +276,7 @@ function clause execute(FWVVMATYPE(funct6, vm, vs1, vs2, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) | 
+      not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
       not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
   assert(SEW >= 16 & SEW_widen <= 64);
@@ -306,7 +306,7 @@ function clause execute(FWVVMATYPE(funct6, vm, vs1, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -367,7 +367,7 @@ function clause execute(FWVTYPE(funct6, vm, vs2, vs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -422,8 +422,8 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
                                 32 => riscv_f32ToUi32(rm_3b, vs2_val[i]),
                                 64 => riscv_f64ToUi64(rm_3b, vs2_val[i])
                               };
-                              write_fflags(fflags);
-                              elem                                
+                              accrue_fflags(fflags);
+                              elem
                             },
         FV_CVT_X_F       => {
                               let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
@@ -431,8 +431,8 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
                                 32 => riscv_f32ToI32(rm_3b, vs2_val[i]),
                                 64 => riscv_f64ToI64(rm_3b, vs2_val[i])
                               };
-                              write_fflags(fflags);
-                              elem                                
+                              accrue_fflags(fflags);
+                              elem
                             },
         FV_CVT_F_XU      => {
                               let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
@@ -450,7 +450,7 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
                                 64 => riscv_i64ToF64(rm_3b, vs2_val[i])
                               };
                               write_fflags(fflags);
-                              elem                                
+                              elem
                             },
         FV_CVT_RTZ_XU_F  => {
                               let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
@@ -458,7 +458,7 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
                                 32 => riscv_f32ToUi32(0b001, vs2_val[i]),
                                 64 => riscv_f64ToUi64(0b001, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
                             },
         FV_CVT_RTZ_X_F   => {
@@ -467,7 +467,7 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
                                 32 => riscv_f32ToI32(0b001, vs2_val[i]),
                                 64 => riscv_f64ToI64(0b001, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
                             }
       }
@@ -475,7 +475,7 @@ function clause execute(VFUNARY0(vm, vs2, vfunary0, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -542,7 +542,7 @@ function clause execute(VFWUNARY0(vm, vs2, vfwunary0, vd)) = {
                                 32 => riscv_f32ToUi64(rm_3b, vs2_val[i])
                               };
                               write_fflags(fflags);
-                              elem                                
+                              elem
                             },
         FWV_CVT_X_F      => {
                               let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
@@ -603,7 +603,7 @@ function clause execute(VFWUNARY0(vm, vs2, vfwunary0, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -670,7 +670,7 @@ function clause execute(VFNUNARY0(vm, vs2, vfnunary0, vd)) = {
                                 16 => riscv_f32ToUi16(rm_3b, vs2_val[i]),
                                 32 => riscv_f64ToUi32(rm_3b, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
                             },
         FNV_CVT_X_F      => {
@@ -679,7 +679,7 @@ function clause execute(VFNUNARY0(vm, vs2, vfnunary0, vd)) = {
                                 16 => riscv_f32ToI16(rm_3b, vs2_val[i]),
                                 32 => riscv_f64ToI32(rm_3b, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
                             },
         FNV_CVT_F_XU     => {
@@ -724,7 +724,7 @@ function clause execute(VFNUNARY0(vm, vs2, vfnunary0, vd)) = {
                                 16 => riscv_f32ToUi16(0b001, vs2_val[i]),
                                 32 => riscv_f64ToUi32(0b001, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
                             },
         FNV_CVT_RTZ_X_F  => {
@@ -733,15 +733,15 @@ function clause execute(VFNUNARY0(vm, vs2, vfnunary0, vd)) = {
                                 16 => riscv_f32ToI16(0b001, vs2_val[i]),
                                 32 => riscv_f64ToI32(0b001, vs2_val[i])
                               };
-                              write_fflags(fflags);
+                              accrue_fflags(fflags);
                               elem
-                            } 
+                            }
       }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -779,6 +779,7 @@ function clause execute(VFUNARY1(vm, vs2, vfunary1, vd)) = {
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
   if illegal_fp_normal(vd, vm, SEW, rm_3b) then { handle_illegal(); return RETIRE_FAIL };
+  assert(SEW != 8);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -809,7 +810,7 @@ function clause execute(VFUNARY1(vm, vs2, vfunary1, vd)) = {
                               32  => riscv_f32Rsqrte7(rm_3b, vs2_val[i]),
                               64  => riscv_f64Rsqrte7(rm_3b, vs2_val[i])
                             };
-                            write_fflags(fflags);
+                            accrue_fflags(fflags);
                             elem
                           },
         FVV_VREC7      => {
@@ -818,31 +819,23 @@ function clause execute(VFUNARY1(vm, vs2, vfunary1, vd)) = {
                               32  => riscv_f32Recip7(rm_3b, vs2_val[i]),
                               64  => riscv_f64Recip7(rm_3b, vs2_val[i])
                             };
-                            write_fflags(fflags);
+                            accrue_fflags(fflags);
                             elem
-                          },         
-        FVV_VCLASS     => {
-                            let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                              16  => riscv_f16Class(vs2_val[i]),
-                              32  => riscv_f32Class(vs2_val[i]),
-                              64  => riscv_f64Class(vs2_val[i])
-                            };
-                            write_fflags(fflags);
-                            elem
-                          }
+                          },
+        FVV_VCLASS     => fp_class(vs2_val[i])
       }
     }
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
 mapping vfunary1_mnemonic : vfunary1 <-> string = {
   FVV_VSQRT       <-> "vfsqrt.v",
   FVV_VRSQRT7     <-> "vfrsqrt7.v",
-  FVV_VREC7       <-> "vfrec7.v",  
+  FVV_VREC7       <-> "vfrec7.v",
   FVV_VCLASS      <-> "vfclass.v"
 }
 
@@ -868,9 +861,8 @@ function clause execute(VFMVFS(vs2, rd)) = {
   let 'm = SEW;
 
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, 0, vs2);
-  F(rd) = if sizeof(flen) == SEW then vs2_val[0]
-          else NaN_box(vs2_val[0]);
-  vstart = EXTZ(0b0);
+  F(rd) = nan_box_vector(vs2_val[0]);
+  vstart = zeros();
 
   RETIRE_SUCCESS
 }
@@ -915,7 +907,7 @@ function clause execute(FVFTYPE(funct6, vm, vs2, rs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let rs1_val : bits('m)                  = get_scalar_fp(rs1, 'm);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);    
+  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
   result      : vector('n, dec, bits('m)) = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -949,7 +941,7 @@ function clause execute(FVFTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1005,7 +997,7 @@ function clause execute(FVFMATYPE(funct6, vm, vs2, rs1, vd)) = {
   let vm_val  : vector('n, dec, bool)     = read_vmask(num_elem, vm, 0b00000);
   let rs1_val : bits('m)                  = get_scalar_fp(rs1, 'm);
   let vs2_val : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);    
+  let vd_val  : vector('n, dec, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
   result      : vector('n, dec, bits('m)) = undefined;
   mask        : vector('n, dec, bool)     = undefined;
 
@@ -1027,7 +1019,7 @@ function clause execute(FVFMATYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1066,7 +1058,7 @@ function clause execute(FWVFTYPE(funct6, vm, vs2, rs1, vd)) = {
   let LMUL_pow_widen = LMUL_pow + 1;
 
   if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
-      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen)) 
+      not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then { handle_illegal(); return RETIRE_FAIL };
   assert(SEW >= 16 & SEW_widen <= 64);
 
@@ -1094,7 +1086,7 @@ function clause execute(FWVFTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1159,7 +1151,7 @@ function clause execute(FWVFMATYPE(funct6, vm, rs1, vs2, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1219,7 +1211,7 @@ function clause execute(FWFTYPE(funct6, vm, vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1264,10 +1256,9 @@ function clause execute(VFMERGE(vs2, rs1, vd)) = {
     if i < start_element then {
       result[i] = vd_val[i]
     } else if i > end_element | i >= real_num_elem then {
-      if tail_ag == UNDISTURBED then {
-        result[i] = vd_val[i]
-      } else if tail_ag == AGNOSTIC then {
-        result[i] = vd_val[i] /* TODO: configuration support */
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] /* TODO: configuration support */
       }
     } else {
       /* the merge operates on all body elements */
@@ -1276,7 +1267,7 @@ function clause execute(VFMERGE(vs2, rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1315,7 +1306,7 @@ function clause execute(VFMV(rs1, vd)) = {
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
@@ -1352,14 +1343,15 @@ function clause execute(VFMVSF(rs1, vd)) = {
 
   /* others treated as tail elements */
   let tail_ag : agtype = get_vtype_vta();
-  if tail_ag == UNDISTURBED then {
-    foreach (i from 1 to (num_elem - 1)) result[i] = vd_val[i]
-  } else if tail_ag == AGNOSTIC then {
-    foreach (i from 1 to (num_elem - 1)) result[i] = vd_val[i] /* TODO: configuration support */
+  foreach (i from 1 to (num_elem - 1)) {
+    result[i] = match tail_ag {
+      UNDISTURBED => vd_val[i],
+      AGNOSTIC    => vd_val[i] /* TODO: configuration support */
+    }
   };
 
   write_vreg(num_elem, SEW, 0, vd, result);
-  vstart = EXTZ(0b0);
+  vstart = zeros();
   RETIRE_SUCCESS
 }
 
